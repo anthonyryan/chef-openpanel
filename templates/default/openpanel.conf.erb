@@ -1,0 +1,25 @@
+## Openpanel Apache2 module
+## managed by opsworks chef
+
+# Include openpanel's vhosts
+IncludeOptional /etc/apache2/openpanel.d/*.conf
+
+# Logax configuration
+LogFormat "%v %h %l %u %t \"%r\" %>s %b \"%{Referer}i\" \"%{User-Agent}i\"" openpanelcomb
+CustomLog "|/usr/bin/logax -b 10 -r -i 180 -m 500000 -s /var/log/apache2/openpanel /var/log/apache2/openpanel/logs" openpanelcomb
+
+
+# Expose openpanel resources
+Alias /openpanel-template-images/ "/var/openpanel/http-templates/images/"
+Alias /openpanel-template-docs/ "/var/openpanel/http-templates/"
+<Directory "/var/openpanel/http-templates">
+  AllowOverride None
+  Order allow,deny
+  Allow from all
+</Directory>
+
+#Replace root index with an openpanel message
+<LocationMatch "^/+$">
+  Options -Indexes
+  ErrorDocument 403 /openpanel-template-docs/index.html
+</LocationMatch>
