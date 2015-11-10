@@ -77,19 +77,21 @@ if node["opsworks"].has_key?("instance") &&
      default[:openpanel][:sitemodules] = [
        'logax',
        'openpanel-mod-apache2',
-       'openpanel-mod-apacheforward',
-       'openpanel-mod-ftp'
+       'openpanel-mod-apacheforward'
      ]
 else
      default[:openpanel][:sitemodules] = %w{}
 end
+#       'openpanel-mod-ftp'
 
-require 'etc'
-include_attribute 'opsworks_initial_setup::default'
+if node["opsworks"].has_key?("instance") 
+  require 'etc'
+  include_attribute 'opsworks_initial_setup::default'
 
-Etc.group do |entry|
-  if entry.name == 'opsworks'
-    default[:opsworks_gid] = entry.gid
+  Etc.group do |entry|
+    if entry.name == 'opsworks'
+      default[:opsworks_gid] = entry.gid
+    end
   end
 end
 
