@@ -58,56 +58,63 @@ node['openpanel']['sitemodules'].each do |install_sitemodules|
   end
 end
 
-# create the default directory just in case it doesn't exist
-directory "#{node[:openpanel][:apachedir]}/openpanel.d" do
-  owner "#{node[:openpanel][:apacheuser]}"
-  group "#{node[:openpanel][:apachegroup]}"
-  mode 0755
-  action :create
-  not_if { ::Dir.exists?("#{node[:openpanel][:apachedir]}/openpanel.d") }
-  only_if { ::Dir.exists?("#{node[:openpanel][:apachedir]}") }
-end
+# perform prep for opsworks apache/php layers
+# todo: determine if apache2/php is part of run-list for non-opsworks chef installs
+if node[:opsworks][:instance][:layers].include?('php-app') || node[:opsworks][:instance][:layers].include?("web")
 
-# create the log directory just in case it doesn't exist
-directory "#{node[:openpanel][:apachelogdir]}/openpanel/logs" do
-  owner "#{node[:openpanel][:apacheuser]}"
-  group "#{node[:openpanel][:apachegroup]}"
-  mode 0755
-  recursive true
-  action :create
-  not_if { ::Dir.exists?("#{node[:openpanel][:apachelogdir]}/openpanel/logs") }
-  only_if { ::Dir.exists?("#{node[:openpanel][:apachelogdir]}") }
-end
-
-# drop the our provided openpanel template into place
-template 'openpanel.conf' do
-  case node[:platform]
-  when 'centos','redhat','fedora','amazon'
-    path "#{node[:openpanel][:apachedir]}/conf/openpanel.conf"
-  when 'debian','ubuntu'
-    path "#{node[:openpanel][:apachedir]}/conf-available/openpanel.conf"
+  # create the default directory just in case it doesn't exist
+  directory "#{node[:openpanel][:apachedir]}/openpanel.d" do
+    owner "#{node[:openpanel][:apacheuser]}"
+    group "#{node[:openpanel][:apachegroup]}"
+    mode 0755
+    action :create
+    not_if { ::Dir.exists?("#{node[:openpanel][:apachedir]}/openpanel.d") }
+    only_if { ::Dir.exists?("#{node[:openpanel][:apachedir]}") }
   end
-  source 'openpanel.conf.erb'
-  owner "#{node[:openpanel][:apacheuser]}"
-  group "#{node[:openpanel][:apachegroup]}"
-  mode 0644
-  notifies :restart, resources(:service => 'apache2')
-  only_if { ::Dir.exists?("#{node[:openpanel][:apachedir]}") }
-end
 
-# delete the default template that openpanel creates to avoid issues, keeping conf.d dir
-file "#{node[:openpanel][:apachedir]}/conf.d/openpanel.conf" do
-  action :delete
-  backup false
-  only_if { ::File.exists?("#{node[:openpanel][:apachedir]}/conf.d/openpanel.conf") }
-end
-
-# create symlink for our openpanel config
-if platform?('debian', 'ubuntu')
-  link "#{node[:openpanel][:apachedir]}/conf-enabled/openpanel.conf" do
-    to "#{node[:openpanel][:apachedir]}/conf-available/openpanel.conf"
-    only_if { ::File.exists?("#{node[:openpanel][:apachedir]}/conf-available/openpanel.conf") }
+  # create the log directory just in case it doesn't exist
+  directory "#{node[:openpanel][:apachelogdir]}/openpanel/logs" do
+    owner "#{node[:openpanel][:apacheuser]}"
+    group "#{node[:openpanel][:apachegroup]}"
+    mode 0755
+    recursive true
+    action :create
+    not_if { ::Dir.exists?("#{node[:openpanel][:apachelogdir]}/openpanel/logs") }
+    only_if { ::Dir.exists?("#{node[:openpanel][:apachelogdir]}") }
   end
+
+  # drop the our provided openpanel template into place
+  template 'openpanel.conf' do
+    case node[:platform]
+    when 'centos','redhat','fedora','amazon'
+      path "#{node[:openpanel][:apachedir]}/conf/openpanel.conf"
+    when 'debian','ubuntu'
+      path "#{node[:openpanel][:apachedir]}/conf-available/openpanel.conf"
+    end
+    source 'openpanel.conf.erb'
+    owner "#{node[:openpanel][:apacheuser]}"
+    group "#{node[:openpanel][:apachegroup]}"
+    mode 0644
+    notifies :restart, resources(:service => 'apache2')
+    only_if { ::Dir.exists?("#{node[:openpanel][:apachedir]}") }
+  end
+
+  # delete the default template that openpanel creates to avoid issues, keeping conf.d dir
+  file "#{node[:openpanel][:apachedir]}/conf.d/openpanel.conf" do
+    action :delete
+    backup false
+    only_if { ::File.exists?("#{node[:openpanel][:apachedir]}/conf.d/openpanel.conf") }
+  end
+
+  # create symlink for our openpanel config
+  if platform?('debian', 'ubuntu')
+    link "#{node[:openpanel][:apachedir]}/conf-enabled/openpanel.conf" do
+      to "#{node[:openpanel][:apachedir]}/conf-available/openpanel.conf"
+      only_if { ::File.exists?("#{node[:openpanel][:apachedir]}/conf-available/openpanel.conf") }
+    end
+  end
+else
+  Chef::Log.info 'No opsworks php layer found. Skipping openpanel apache prep.'
 end
 
 # setup our default openpanel-admin password and credentials
@@ -133,12 +140,14 @@ end
 
 # add our existing opsworks users to the openpanel user group
 #group 'opsworks'
-existing_ssh_users = load_existing_ssh_users
-existing_ssh_users.each do |id, name|
-  execute "openpanel_usergroup_add" do
-    Chef::Log.info("Running usermod -a -G #{node[:openpanel][:usergroup]} #{name}")
-    user 'root'
-    command "usermod -a -G #{node[:openpanel][:usergroup]} #{name}"
-    ignore_failure true
+if node["opsworks"].has_key?("instance")
+  existing_ssh_users = load_existing_ssh_users
+  existing_ssh_users.each do |id, name|
+    execute "openpanel_usergroup_add" do
+      Chef::Log.info("Running usermod -a -G #{node[:openpanel][:usergroup]} #{name}")
+      user 'root'
+      command "usermod -a -G #{node[:openpanel][:usergroup]} #{name}"
+      ignore_failure true
+    end
   end
 end
